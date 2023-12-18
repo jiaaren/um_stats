@@ -1,0 +1,711 @@
+---
+title: "Assignment 2"
+author: "Khong Jia Ren"
+date: "2023-12-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+The Olympic Games is a tradition which traces its roots back to ancient Greece. In the 21st century, the Olympic Games became a canvas upon which the world shows its aspirations, rivalries and triumps.
+
+The Olympic Games is not merely a stage which countries or athletes demonstrate their athletic capabilities, and not just an avenue for competition or rivalries. More importantly for history, and specifically for the modern Olympic Games (which officially began in 6 April 1896), it represents a wealth of human development, innovation of sporting technology and a representation of global powers and country cooperation.
+
+This analysis is geared towards anybody who wants to understand an overview of history of the Olympics throughout the years and its growth and development, and also to shed light over to the key players of the Olympics in recent times.
+
+# Problem Statement
+
+We pose the following questions which surround 2 main ideas:
+
+1.  **Key countries and athletes in the Olympics.**
+    -   Which countries have a rich history of hosting the Olympic Games, and what is the significance of hosting the games?
+
+    -   Who are the most decorated athletes?
+2.  **Evolution of the modern Olympic Games.**
+    -   What is the shifting trend of dominance of countries in the Olympic Games?
+
+    -   What are the long standing events and most recently added disciplines into the games?
+
+    -   How has inclusivity shaped the Olympic Games, and it's choice of games throughout the years?
+
+# Set-up and datasets
+
+## Load libraries
+
+**Libraries loaded and its descriptions:**
+
+-   `dplyr` - data manipulation and transformation.
+
+-   `skimr` - summary statistics
+
+-   `tidyr` - tidying, reshaping, restructuring data
+
+-   `ggplot2` - data visualisation package
+
+-   `stringr` - functions for working with strings in R
+
+-   `maps` - for working with graphical maps in R
+
+-   `countrycode` - simplifies conversion of country names and codes
+
+```{r}
+library(dplyr)
+library(skimr)
+library(tidyr)
+library(ggplot2)
+library(stringr)
+
+# install.packages('maps')
+# install.packages("countrycode")
+library(maps)
+library(countrycode)
+```
+
+## Load and Inspection of Datasets
+
+-   Source of dataset "**Olympic Summer & Winter Games, 1896-2022"** can be found in Kaggle (<https://www.kaggle.com/datasets/piterfm/olympic-games-medals-19862018/data>).
+
+-   Note: For the purposes of this analysis, we would only be focusing on the **Summer Olympics**. Our dataset downloaded contains both Summer and Winter games, and our data cleaning and further analyses would explicitly exclude the Winter games.
+
+-   Kaggle dataset contains multiple `.csv` files, which need to be joined subsequently for further analysis. Information of the dataset are as follows:
+
+    | **Raw Data**           | **Description**                                             |
+    |-----------------------|-------------------------------------------------|
+    | `olympic_athletes.csv` | personal information about athletes (name, short bio, etc.) |
+    | `olympic_medals.csv`   | general information on medalists (Athlete or Team)          |
+    | `olympic_hosts.csv`    | hosts (year, city, country, etc)                            |
+    | `olympic_results.csv`  | general information on results (Athlete or Team)            |
+
+```{r}
+# Load csv datasets into dataframes
+df_athletes <- read.csv('C:/Users/JIAREN/Documents/SQB7026 - Assignment 2/olympic_athletes.csv')
+df_hosts <- read.csv('C:/Users/JIAREN/Documents/SQB7026 - Assignment 2/olympic_hosts.csv')
+df_medals <- read.csv('C:/Users/JIAREN/Documents/SQB7026 - Assignment 2/olympic_medals.csv')
+df_results <- read.csv('C:/Users/JIAREN/Documents/SQB7026 - Assignment 2/olympic_results.csv')
+```
+
+### Inspection: Athletes data
+
+-   There are a total of 7 columns
+
+-   One numerical column with missing data, `athlete_year_birth`. Upon inspection of a sample with no year of birth (<https://olympics.com/en/athletes/palmer-taylor>) and without year of birth (<https://olympics.com/en/athletes/manuela-laura-pesko>), it seems that there are raw data issues with `athlete_year_birth` where some athlete profiles in the official olympic website does not contain the year_birth for some athletes.
+
+    -   For this purpose, we should cautious when utilising `athlete_year_birth` to derive insights, or avoid the use of this column all together.
+
+```{r}
+# display first n rows of dataframe
+head(df_athletes)
+# display statistics about dataframe
+skimr::skim(df_athletes)
+```
+
+### Inspection: Hosts data
+
+-   There are a total of 7 columns
+
+-   No missing data where all column's `n_missing` is 0
+
+```{r}
+# display first n rows of dataframe
+head(df_hosts)
+# display statistics about dataframe
+skimr::skim(df_hosts)
+```
+
+### Inspection: Medals data
+
+-   There are a total of 12 columns
+
+-   Noted that there is a single column that has 5 missing values, `country_code`. This is not a problem as this can be substituted with the column `country_3_letter_code` which has no missing values. Both of the country code column function as an identifier for the type of country.
+
+```{r}
+# display first n rows of dataframe
+head(df_medals)
+# display statistics about dataframe
+skimr::skim(df_medals)
+```
+
+### Inspection: Results data
+
+-   There are a total of 15 columns
+
+-   Similarly as the `df_medals` data above, noted that there is a single column that has 72 missing values, `country_code`. This is not a problem as this can be substituted with the column `country_3_letter_code` which has no missing values. Both of the country code column function as an identifier for the type of country.
+
+```{r}
+# display first n rows of dataframe
+head(df_results)
+# display statistics about dataframe
+skimr::skim(df_results)
+```
+
+# Data Cleaning and Pre-processing
+
+## Step 1: Handling Missing values
+
+Following from our analysis over missing values in the inspection steps above, we have noted missing values in some of the columns, **however these wouldn't be a concern as the columns will either (i) not be used, or (ii) an alternative column is identified.**
+
+| **Raw Data**           | Data Frame    | **Description**                                                                                     |
+|-----------------|-----------------|---------------------------------------|
+| `olympic_athletes.csv` | `df_athletes` | 1 column has missing values but this relates to data scraping issues, this column will not be used. |
+| `olympic_medals.csv`   | `df_medals`   | 1 column with missing values but another alternative column can be used.                            |
+| `olympic_hosts.csv`    | `df_hosts`    | 0 columns with missing values.                                                                      |
+| `olympic_results.csv`  | `df_results`  | 1 column with missing values but another alternative column can be used.                            |
+
+## Step 2: Joining `df_medals` with `df_hosts`
+
+Joining medals with hosts dataframes with columns `slug_game` and `game_slug`.
+
+-   Sense check is performed over joined dataframe to confirm that rows have been successfully joined. Using the `game_season` column, analysis shows that there are 0 row with null values for the right table, indicating that all rows have been fully joined.
+
+```{r}
+# Joining medals dataframe with hosts as both tables will commonly be used alongside each other.
+df_medals_hosts <- df_medals %>% left_join(df_hosts,
+                                         by=c('slug_game'='game_slug')
+)
+# to check that there are no null values
+sum(is.na(df_medals_hosts$game_season))
+```
+
+## Step 3: Only filtering `df_medals_hosts` for Summer games
+
+-   As our analysis will only concern the Summer Olympic games, we will only consider data with `Summer` label for the `game_season` column.
+
+-   First we inspect the unique values for `game_season`, to make sure that it adheres to our expectations that there are only 2 seasons, i.e. `Summer` and `Winter`. Consistent with our expectations, there are only 2 types of seasons.
+
+```{r}
+# find unique values for the game_season column
+unique(df_medals_hosts$game_season)
+```
+
+```{r}
+# filter data to only include Summer games and save as df_summer
+df_summer <- filter(df_medals_hosts, game_season == 'Summer')
+head(df_summer)
+```
+
+-   We can safely filter using `"Summer"` knowing that it is the only label for summer olympic games
+
+```{r}
+# view summary of df_summer
+skimr::skim(df_summer)
+```
+
+## Step 4: Preprocess data to construct table where reach row represents a unique event
+
+Clean `df_summer` as there are some grouped events which are reported duplicate
+
+```{r}
+# need to group by discipline_title and event_title, event_title is not unique
+df_summer_cleaned <- df_summer %>% distinct(game_name, game_year, country_name, country_3_letter_code, discipline_title, event_title, medal_type)
+```
+
+```{r}
+# view first n rows of df_summer cleaned
+head(df_summer_cleaned)
+# view summary of df_summer
+skimr::skim(df_summer_cleaned)
+```
+
+## Step 5: Preprocess athletes data
+
+Preprocess athletes data to:
+
+1.  Only include Summer games
+2.  To clean medals data, i.e. removal of new line `\n` and replace with empty string `""`:
+    -   example: convert `\n\n\n1\n\nB\n\n` to `1B`
+
+```{r}
+# filter out athletes based on first_game for summer games only 
+df_athletes_join <- df_athletes %>%
+  left_join(df_hosts, by=c('first_game'='game_name')) %>%
+  filter(game_season=="Summer") %>%
+  mutate(athlete_medals_cleaned=str_replace_all(athlete_medals, "\\s", ""))
+
+head(df_athletes_join)
+```
+
+## Step 6: Filtering `df_results` for Summer games
+
+```{r}
+# left join results data with hosts and filter for only summer games
+df_results_cleaned <- df_results %>% left_join(df_hosts, by=c('slug_game'='game_slug')) %>% 
+      filter(game_season=="Summer")
+
+head(df_results_cleaned)
+```
+
+# Results and Discussion (Plots/Visualisations)
+
+## Plot 1: Summer Olympic Hosts
+
+### Further preprocessing
+
+Load world map data with function `map_data` which is part of the `maps` library.
+
+```{r}
+# load map data for plotting
+world_map <- map_data("world")
+# exclude Antarctica for ease of visualisation
+world_map <- subset(world_map, region != "Antarctica")
+```
+
+Construct Frequency table
+
+```{r}
+# aggregate hosts based on count of hosting summer games
+df_agg_hosts <- df_hosts %>%
+    filter(game_season == "Summer") %>%
+    group_by(game_location) %>%
+    summarise(count=n()) %>%
+    arrange(desc(count))  
+
+# display n rows of the frequency table
+head(df_agg_hosts)
+```
+
+We perform a sense check whether all countries in our hosts frequency table are found in the `world_map` data. The analysis shows that there are 6 host locations (`game_location`) which were "not found", these are likely due to mapping issues between our `world_map` data and our `df_hosts` Kaggle dataset.
+
+```{r}
+# sense check over regions not in world map "regions"
+df_agg_hosts[!(df_agg_hosts$game_location %in% unique(world_map$region)), ]
+```
+
+We make the following **mapping** **changes**:
+
+-   United States -\> `USA`
+
+-   Great Britain -\> `UK`
+
+-   Federal Republic of Germany -\> `Germany`
+
+-   Republic of Korea -\> `South Korea`
+
+-   USSR -\> `Russia`
+
+    -   Note: Although this is not a fair representation as the USSR (Union of Soviet Socialist Republics) was a union of several soviet member countries, the largest country which covered the USSR (and also managed USSR) is Russia. Hence, a direct mapping to Russia was made (although this doesn't exactly map to the other USSR member countries).
+
+```{r}
+# mapping changes
+df_agg_hosts[df_agg_hosts$game_location == "United States", "game_location"] = "USA"
+df_agg_hosts[df_agg_hosts$game_location == "Great Britain", "game_location"] = "UK"
+df_agg_hosts[df_agg_hosts$game_location == "Federal Republic of Germany", "game_location"] = "Germany"
+df_agg_hosts[df_agg_hosts$game_location == "Republic of Korea", "game_location"] = "South Korea"
+df_agg_hosts[df_agg_hosts$game_location == "USSR", "game_location"] = "Russia"
+```
+
+We make the following **modifications** specifically for the 1956 Summer Olympics:
+
+-   Delete the row of "**Australia, Sweden**", 1, and increment the row for "**Australia**".
+
+-   This is because the 1956 Summer Olympics was hosted by Australia, however, only equestrian events (horse riding) were hosted in Stockholm Sweden that year. Since a significant majority of the summer games events were hosted in Australia, it is safe to consider the 1956 Summer Olympics as hosted by Australia only.
+
+```{r}
+# modification made for "Australia, Sweden"
+# delete row from frequency table
+df_agg_hosts <- subset(df_agg_hosts, game_location != "Australia, Sweden")
+# increment host count for Australia by 1
+df_agg_hosts[df_agg_hosts$game_location == "Australia", "count"] = df_agg_hosts[df_agg_hosts$game_location == "Australia", "count"] + 1
+```
+
+**Perform sense check over countries not found again**
+
+-   no missing countries found (which is good)
+
+```{r}
+# sense check over regions not in world map "regions"
+df_agg_hosts[!(df_agg_hosts$game_location %in% unique(world_map$region)), ]
+```
+
+```{r}
+# display top N hosts
+df_agg_hosts
+```
+
+### Analysis
+
+The worldmap heatmap indicates the location of where the Summer Olympics have been held, where it is clear that the **United States have hosted the most games, 4** all from the years 1904, 1932, 1984 and 1996 (where 1996 represents the centennial celebration of the modern Olympic Games). They will be hosting one more game very soon for the 2028 Games. The hosting of so many Olympic Games reflects the ability and willingness of a country to take on the responsibilities of organizing such a major international event, in this instance, it is consistent with the USA being a global super-power since more than a hundred years ago.
+
+It can be observed that there is a **high concentration of Games being held in Europe** as indicated by the heatmap, where 3 out of the top 5 host countries are from Europe, i.e. UK (hosted 3 games), France (hosted 2 games), Greece (hosted 2 games). United Kingdom would have tied United States for the same number of games held, however, it is now shy of 1 hosting due to the cancellation of the 1944 Summer Olympics as a result of World War II.
+
+**3 countries in Asia** held the Summer Olympic Games, namely Japan (hosted 2), China (hosted 1) and South Korea (hosted 1). Japan was the first Asian country to hold the Summer Games, in 1964, where it was the first games to be telecasted internationally without the need for tapes to be flown overseas. Japan is also the first country in Asia to host 2 Summer games, with the second being the 2020 Games. It would have held 3 games, however, the 1940 games, where it won the bid, were cancelled due to World War II.
+
+Based on the heatmap, there are **no Summer Games held in Africa, South Asia (middle east/India), Southeast-Asia.** Hosting the Olympic games requires significant infrastructure and is an expensive endevour, it also requires countries to be politically stable. Africa and Southeast-Asia have historically consisted of third-world countries, where costs and financial budgets tend to be geared towards development and improvement of the country rather than significant infrastructure spending for international sports. Middle-east tend to be politically unstable and hence are less favoured for international events.
+
+```{r}
+# plot world map heatmap for frequency of host for a country
+ggplot(df_agg_hosts) +
+    geom_map(dat = world_map, map = world_map, aes(map_id = region),
+             fill = "white", color = "#7f7f7f", linewidth = 0.25 ) +
+    geom_map(map = world_map, aes(map_id = game_location, fill = count),
+             size = 0.25) +
+    scale_fill_gradient(low = "#fff7bc", high = "#cc4c02", name = "Hostings") +
+    expand_limits(x = world_map$long, y = world_map$lat) +
+    ggtitle(paste("World map heatmap for total Summer Olympic Games hostings for a country")) +
+    xlab("x-coor") +
+    ylab("y-coor")
+```
+
+### Others
+
+-   Reference for world map plot
+
+    -   <https://stackoverflow.com/questions/70284031/how-do-i-create-a-world-map-with-a-heat-map-on-top-of-it>
+
+## Plot 2: Most decorated athletes
+
+### Further preprocessing
+
+First we wold need to convert the `athlete_medals_cleaned` column, and by using regex capture groups `"((\d+)G)?((\d+)S)?((\d+)B)?"`, capture the number of `Gold`, `Silver` and `Bronze` medals as a matrix below:
+
+```{r}
+pattern <- "((\\d+)G)?((\\d+)S)?((\\d+)B)?"
+# construct matrix using regex pattern above
+athlete_medals_mat <- str_match(df_athletes_join$athlete_medals_cleaned, pattern)
+
+head(athlete_medals_mat, n=10)
+```
+
+Extract data from medals matrix above and append to `df_athletes_join`:
+
+```{r}
+# extract individual Gold, Silver and Bronze medals from the matrix constructed above and calculate total medals
+df_athletes_medals <- df_athletes_join[, c("athlete_full_name", "athlete_url", "games_participations")] %>%
+  mutate(gold_medals=as.integer(athlete_medals_mat[,3]),
+         silver_medals=as.integer(athlete_medals_mat[,5]),
+         bronze_medals=as.integer(athlete_medals_mat[,7])) %>%
+  mutate(gold_medals=ifelse(is.na(gold_medals), 0, gold_medals),
+         silver_medals=ifelse(is.na(silver_medals), 0, silver_medals),
+         bronze_medals=ifelse(is.na(bronze_medals), 0, bronze_medals),
+         total_medals= gold_medals + silver_medals + bronze_medals) %>% 
+  # sort by descending order according to total medals
+  arrange(desc(total_medals))
+
+head(df_athletes_medals, n=10)
+```
+
+Reshaping data by transposing columns of `gold_medals`, `silver_medals`, and `bronze_medals` to `medal_count` and `medal` (which is denoted by GOLD, SILVER, BRONZE).
+
+```{r}
+# reshaping data
+df_athlete_gold_subset <- df_athletes_medals[, c('athlete_full_name', 'athlete_url', 'games_participations', 'gold_medals', 'total_medals')] %>% mutate(medal="GOLD") %>% rename(medal_count=gold_medals)
+df_athlete_silver_subset <- df_athletes_medals[, c('athlete_full_name', 'athlete_url', 'games_participations', 'silver_medals', 'total_medals')] %>% mutate(medal="SILVER") %>% rename(medal_count=silver_medals)
+df_athlete_bronze_subset <- df_athletes_medals[, c('athlete_full_name', 'athlete_url', 'games_participations', 'bronze_medals', 'total_medals')] %>% mutate(medal="BRONZE") %>% rename(medal_count=bronze_medals)  
+
+# bind and merge, and filter according to top N athletes with medals N = 25
+N <- 25
+# limit
+top_n_df_athletes <- df_athletes_medals[1:N, 'athlete_url']
+# bind and merge
+df_athlete_medal_reshaped <- rbind(df_athlete_gold_subset, df_athlete_silver_subset, df_athlete_bronze_subset) %>%
+  arrange(desc(total_medals), athlete_full_name) %>%
+  filter(athlete_url %in% top_n_df_athletes)
+
+# print dimensions and first n rows
+dim(df_athlete_medal_reshaped)
+head(df_athlete_medal_reshaped)
+```
+
+### Analysis
+
+From our stacked bar plot below, we can observe that **Michael Phelps from the USA** has the most number of Olympic medals, he has a total of 28 medals (23 Gold, 3 Silver and 2 Bronze) from swimming events, and is clearly the **most decorated athlete** in the Olympics. He first debut at the 2000 Sydney Olympics at the age of 15 but did not win a medal. Subsequently, his performance in the 2004 Athens Olympics garnered global attention when he won 6 gold medals and 2 bronze. His performance in the 2008 Beijing Olympics was historic as he won 8 gold medals, the most Gold medals in a single Olympics, while also setting numerous world and Olympic records. He further competed in the 2012 and 2016 Olympics and won more medals.
+
+Prior to Michael Phelps, **Larisa Latynina** **from USSR** was considered to be one of the most successful Olympians, she is a gymnast and debut in the Olympics in 1956 with subsequent retirement in 1966. Her medal tally includes 9 gold, 5 silver, and 4 bronze medals. Her historic success is attributable to her dominance at the 1960 Rome Olympics, winning 6 medals (4 gold, 2 silver), including her second consecutive all-around gold. Back then, she set a record for the most medals won by a gymnast at a single Olympics.
+
+After the top 3 athletes, we observe that there are many athletes which have 13, 12, 11 medals in the top 25. These athletes come from a variety of sports (i.e. swimming, gymnastics, athletics). Many of these athletes compete in at least 3 Summer Olympic Games, with Michael Phelps competing in 5, and even Isabel Werth (German equestrian athlete) competing in 6 games. This shows that **longevity and consistency** in the Games is also a crucial contributor to total medal count for an athlete.
+
+We also observe that the top 25 athletes all have at least 1 Gold medal, with the exception of Franziska Van Almsick (German female swimmer) who does not have a single Gold medal but has 4 Silver and 6 Bronze. This indicates that longevity and consistency **needs to be coupled with talent, skill, persistence and hardwork**, where the most decorated athletes would need to be consistently performing at their best throughout multiple games, and being the best would mean winning Gold.
+
+```{r}
+# plot stacked bar chart
+ggplot(data=df_athlete_medal_reshaped,
+       mapping=aes(x=reorder(athlete_full_name, -medal_count),
+                   y=medal_count,
+                   fill=factor(medal, levels=c("GOLD", "SILVER", "BRONZE")))) +
+    scale_fill_manual(values=c("#FFD700", "#C0C0C0", "#CD7F32")) +
+    geom_bar(stat='identity') +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(fill="Medals") +
+    ggtitle(paste("Stacked bar plot of highest number of medals for top", N, "athletes")) +
+    xlab("Athlete") +
+    ylab("Number of Medals") +
+    scale_y_discrete(limits=seq(0, max(df_athlete_medal_reshaped$total_medals), 2))
+```
+
+## Plot 3: Trend of top countries' gold medal counts
+
+### Further preprocessing
+
+Setting constants to allow dynamic tweaking of the graph subsequently. For the purposes of this graph, we will look back to a default of `75` years and only consider the top `7` countries, to prevent from our chart being too overloaded or squished.
+
+```{r}
+# set constants
+N_TOP_COUNTRIES = 7
+N_YEARS_BACKWARDS = 75
+```
+
+Identify top countries with highest medal counts:
+
+```{r}
+# group by data by country_name and select top N_TOP_COUNTRIES 
+top_n_gold_medals <- df_summer_cleaned %>% 
+                  filter(game_year > (max(df_summer$game_year) - N_YEARS_BACKWARDS)) %>% 
+                  group_by(country_name) %>% 
+                  summarise(
+                    gold_count=sum(ifelse(medal_type=='GOLD', 1, 0))
+                  ) %>% 
+                  arrange(desc(gold_count)) %>%
+                  slice(1:N_TOP_COUNTRIES)
+
+top_n_gold_medals
+```
+
+Further preprocessing by aggregating the medal count for unique `game_name`, `game_year` and `country_name`:
+
+```{r}
+# group by according to olympic game name, game year, and country name
+# and filter according to top 5 countries with gold medals identified above
+df_top_country_gold <- df_summer_cleaned %>% 
+              group_by(game_name, game_year, country_name) %>% 
+              summarise(
+                gold_count=sum(ifelse(medal_type=='GOLD', 1, 0)),
+                silver_count=sum(ifelse(medal_type=='SILVER', 1, 0)),
+                bronze_count=sum(ifelse(medal_type=='BRONZE', 1, 0))
+              ) %>% 
+              filter(country_name %in% top_n_gold_medals$country_name &
+                       # filter to last 75 years
+                      game_year > (max(df_summer$game_year) - N_YEARS_BACKWARDS)) %>% 
+              arrange(desc(gold_count), desc(silver_count), desc(bronze_count))
+
+# view top n rows of df_top_country_gold 
+head(df_top_country_gold)
+```
+
+```{r}
+# calculate min and max year of game year and construct a vector which increments by 4 years
+min_year <- min(df_top_country_gold$game_year)
+max_year <- max(df_top_country_gold$game_year)
+(game_years <- seq(min_year, max_year, 4))
+```
+
+### Analysis
+
+Our line chart shows the trend of Gold medals won for the top 7 countries in the Summer Olympic Games in the past 75 years. Gold medal counts are commonly associated with country success and glory in the Games, and is used as a ranking metric when tabulating the best performing country in each game.
+
+At a quick glance, we observe that the **United States of America generally have been dominating the Games** by a large margin since 1992. However prior to that, we can observe that there is fierce competition between the Soviet Union (USSR) and the USA where each parties have shared the winner's stage between 1952 and 1988. This competition is a reflection of the broader geopolitical rivalry and ideological tensions of the Cold War back then. The USA and the Soviet Union were the two superpowers during this period, and their competition extended beyond political and military realms into the realm of sports.
+
+We see that the **trend for USSR stops after the Games of 1988** which was held in South Korea. This was due to the dissolution of the Soviet Union in December 1991, where this subsequently resulted in the emergence of many independent nations, giving way to participations of the individual successor countries in subsequent Olympic Games.
+
+We observe several countries with rising trends in number of Gold medals, namely the **People's Republic of China after 1988, Great Britain (UK) after 1996 and Japan after 2012.** These can be attributable to reforms and investments made by the countries to project national strength and prestige on the international stage. China has managed to surpass the USA in gold medal count in the 2008 Beijing Olympics, and is the only year where an Asian country has led the leaderboards. In the 2020 Tokyo Olympics however, China was only shy of 1 gold medal (38 gold) to equal the USA (39 gold).
+
+An interesting fact over the performance of Great Britain in the 1996 Atlanta games is that it was the only year where they won only a single Gold medal. This was enough to ensure that they have at least won a single medal throughout all their Summer Olympics participations. The 1996 Atlanta Games was considered "rock bottom" for UK in the Summer Olympics, which resulted in the creation of *UK Sport,* a government agency to aid funding for elite sports. **Many other countries underwent reforms and government investment** in sports facilities and training, which resulted in increase in medal counts.
+
+The **most consistent** country is Italy, where number of Gold medals in more recent years have hovered around 5 to 10 medals.
+
+```{r}
+# plot line graph of gold medals for each country
+ggplot(data=df_top_country_gold, 
+        mapping=aes(x=game_year, y=gold_count, group=country_name)) +
+    geom_line(aes(col=country_name)) +
+    scale_x_discrete(limits=game_years) +
+    scale_y_discrete(limits=seq(0, max(df_top_country_gold$gold_count), 5)) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(title = "Gold Medals for each country over the years",
+         x = "Olympic Year",
+         y = "Number of Gold Medals",
+         color = "Country")
+```
+
+## Plot 4 : Long standing events and recently added disciplines
+
+### Further preprocessing
+
+Renaming disciplines due to duplicate and similar games
+
+```{r}
+# renaming of some disciplines to more general names
+df_summer_cleaned_dup <- df_summer_cleaned
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title == "Trampoline", "discipline_title"] <- "Trampoline Gymnastics"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title == "Rhythmic Gymnastics", "discipline_title"] <- "Gymnastics Rhythmic"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title == "Artistic Gymnastics", "discipline_title"] <- "Gymnastics Artistic"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title == "Rugby Sevens", "discipline_title"] <- "Rugby"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title == "Synchronized Swimming", "discipline_title"] <- "Artistic Swimming"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title %in% c("Baseball", "Softball"), "discipline_title"] <- "Baseball/Softball"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title %in% c("Equestrian Jumping", "Equestrian Eventing", "Equestrian Dressage"), "discipline_title"] <- "Equestrian"
+df_summer_cleaned_dup[df_summer_cleaned_dup$discipline_title %in% c("Cycling BMX Racing", "Cycling BMX Freestyle"), "discipline_title"] <- "Cycling BMX"
+```
+
+```{r}
+# mutate mutate data to contain an in_year column
+df_games_in_year <- distinct(df_summer_cleaned_dup[, c('discipline_title', 'game_year')]) %>% 
+  mutate(in_year=1)
+
+# print top n rows
+head(df_games_in_year)
+```
+
+```{r}
+# calculate min and max year and define range
+min_year <- min(df_games_in_year$game_year)
+max_year <- max(df_games_in_year$game_year)
+(vec_game_years <- seq(min_year, max_year, 4))
+```
+
+```{r}
+# obtain total count of occurences of a discipline
+df_count_discipline_occurences <- df_games_in_year %>%
+    group_by(discipline_title) %>%
+    summarise(count_games=n())
+
+# obtain list of disciplines in most recent games, tokyo 2020
+vec_discipline_in_2020 <- df_games_in_year[df_games_in_year$game_year == 2020, 'discipline_title']
+```
+
+```{r}
+# mutate df_games_in_year to incorporate count of total occurences and most recent games
+df_games_in_year <- df_games_in_year %>% 
+  mutate(in_year_2020=if_else(discipline_title %in% vec_discipline_in_2020, 1, 0)) %>%
+  left_join(df_count_discipline_occurences, by='discipline_title')
+
+head(df_games_in_year)
+```
+
+**Split data** `df_games_in_year` to disciplines held in Tokyo 2020 and not held in 2020.
+
+```{r}
+# split to in and not in 2020
+df_games_in_year_2020 <- df_games_in_year %>% filter(in_year_2020==1)
+df_games_not_in_year_2020 <- df_games_in_year %>% filter(in_year_2020==0)
+```
+
+### Analysis
+
+Based on the timeline analysis over the Olympic disciplines which are held throughout the years, we **can observe disciplines which are commonplace** (as they are ranked higher in the graph) in Olympics such as Swimming, Athletics, Weightlifting. Similarly as our analysis for earlier plots, the games for years 1916, 1940 and 1944 are unavailable as they were cancelled due to World Wars I and II.
+
+As I have ordered the disciplines in terms of frequency of occurence, we can see that 4 disciplines, namely **Swimming, Fencing, Artistic Gymnastics and Athletics have been held in every single Olympic Games** since the commencement of the modern Olympic Games in 1896 up until the recent games in 2020. Many of these sports have a rich history and tradition that dates back well before the modern Olympic Games were established in 1896.
+
+It is evident that during the periods of **1896 to 1912 that there were inconsistent holding of events**, for example Wresting was not held in the 1900 games, and Weightlifting was not held in 1900, 1908 and the 1912 games. This is likely due to the resurgence of the modern Olympic Games in 1896, where host countries either do not have the necessary infrastructure in place to cater for all of the disciplines. However, **commencing on the 1948 Games, it is evident that the Summer Olympics have solidified over its core disciplines and sports**, where even Boxing, Basketball and Shooting are commonplace events.
+
+Interestingly, **several events such as Archery and Tennis see huge gaps of occurence of 40-50 years.** Tennis faced disputes between the International Olympics Committee (IOC) and the Tennis Federation over policies defining amateur players in 1924, and Archery was removed in 1924 due to lack of international rules and structure. However, as these sports matured, they were subsequently included back into the Olympics (despite it taking decades).
+
+Over time, it can be observed that more sports **were added into the Games as time went on, for example Judo and Volleyball were first added in the 1964 Tokyo Olympics**, where both sports are famous for the Japanese locals. It cannot be denied that the prominence of Judo internationally was due to the introduction of the discipline into the Olympics by Japan. **In the recent 2020 Tokyo Olympics, 5 new disciplines have been added**, namely Surfing, Skateboarding, Karate, Sport climbing and 3x3 basketball (as they are ranked low in the plot due to their recency of only 1 occurence).
+
+```{r}
+# plot heatmap of games in tokyo 2020 games
+ggplot(data=df_games_in_year_2020,
+       mapping=aes(x=game_year, y=reorder(discipline_title, count_games), fill=in_year)) +
+  geom_tile(color='skyblue') +
+  theme(legend.position = "none") +
+  scale_x_discrete(limits=vec_game_years, position="top") +
+  scale_y_discrete(position = "right") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 0),
+        axis.text.y = element_text(size=rel(0.7)),
+        plot.title = element_text(size=12)) +
+  labs(title = "Timeline of disciplines throughout the years (events in Tokyo 2020 Olympics)",
+       x = "Game Year",
+       y = "Discipline")
+```
+
+## Plot 5 : Inclusivity in Events
+
+### Further preprocessing
+
+Noted in the `df_summer` dataframe, that there are **Mixed** and **Open** games for `event_gender`.
+
+-   Mixed-gender games are games which consists of 2 gender athletes competing at a single time. E.g. badminton mixed doubles
+
+-   Open-gender games are games which are open to both male and female athletes, E.g. Equestrian (horse-riding), and Sailing are open gendered sports.
+
+For the purpose of this analysis, we will be analyzing sports as either Men/Non-Men, to denote inclusivity of the sports to non male athletes only. Hence, I will be consolidating Women, Mixed and Open games as Women/Others.
+
+```{r}
+# filter columns and add placeholder column of n=1
+df_distinct_games <- distinct(df_summer[, c('game_year', 'discipline_title', 'event_gender', 'event_title', 'participant_type')]) %>% 
+    mutate(n=1)
+
+# inspect first n rows of dataframe, and print dimensions of dataframe
+dim(df_distinct_games)
+head(df_distinct_games)
+
+# inspecting event_gender frequency table
+df_distinct_games %>% group_by(event_gender) %>% 
+    summarize(count = n())
+```
+
+Inspection of updated `event_gender` column to confirm that the only 2 labels are observed.
+
+```{r}
+# assigning non-Men sports with Women/Others
+df_distinct_games[df_distinct_games$event_gender != "Men", "event_gender"] = "Women/Others"
+
+# inspecting event_gender frequency table again
+df_distinct_games %>% group_by(event_gender) %>% 
+    summarize(count = n())
+```
+
+```{r}
+# processing data
+df_game_gender <- df_distinct_games %>% group_by(game_year, event_gender) %>% 
+  summarise(total_games=sum(n))
+
+# group by year and combine game_gender df with total for all gender, and compute %
+df_total_games_year <- df_game_gender %>% group_by(game_year) %>% 
+  summarise(total_games_year=sum(total_games))
+df_game_gender <- df_game_gender %>% left_join(df_total_games_year, by="game_year") %>% 
+  mutate(ratio=total_games/total_games_year)
+
+# print top n of dataframe
+head(df_game_gender)
+```
+
+```{r}
+# calculate min and max year and define range
+min_year <- min(df_game_gender$game_year)
+max_year <- max(df_game_gender$game_year)
+vec_game_years <- seq(min_year, max_year, 4)
+```
+
+### Analysis
+
+The plot displays the trend of gender inclusivity in the Summer Olympic Games with respect to events throughout the years, in terms of stacked barplots. Empty bars are noted for the years 1916, 1940 and 1944 due to the on-going World War I and World War II where the games were cancelled then.
+
+The categories are separated as Men and Women/Others, where Others are either Mixed gendered events or Open gendered events. At a quick glance, we can observe that **as time goes by, Summer Olympics events have become more gender inclusive**, this can be evidenced by the increasing proportion of the Women/Others. Also, we can observe that **the number of events have also steadily been increasing**, to cater more more variety of sports.
+
+The increase in proportion of gender inclusive sports could be attributable to the evolution of societal norms, and changes in gender roles over time. The International Olympic Committee (IOC) has **also taken steps to promote gender equality** within the Olympic movement and promoting equal opportunities for male and female athletes.
+
+We can observe that the 2020 Tokyo Olympics saw for a **first time, a higher proportion of non-Male exclusive events of Male exclusive events at 51.3% to 48.7%.** It was reported that the number of female athletes at the 2020 Games were almost equal to male athletes, and is considered the first gender-balanced Olympic Games in history. This increase in proportion is also highly dependent on spike of new sports introduced such as skateboarding, surfing, 3x3 basketball, which include female participation, or is mixed gendered.
+
+It can also be observed between the years of 1996 and 2000, where a **spike in new events led to higher proportions for non-Male exclusive events**. Several events were contested for the first time in the Sydney 2000 Olympics where triathlon and "tae kwon do" had both male and female categories. New events moving forward will likely be gender inclusive or gender neutral.
+
+The first **Summer Olympics in 1896 Athens saw a 100% male participation** as women were not allowed to compete. The second games in Paris 1900 however began to feature female athletes. Hélène de Pourtalès of Switzerland became the first woman to compete at the Olympic Games and became the first female Olympic champion. As the years gone by, more events were made to be inclusive for both genders.
+
+```{r}
+# plot horizontal stacked bar chart
+ggplot(data=df_game_gender,
+       mapping=aes(x=game_year, y=total_games, 
+                   fill=factor(event_gender, level=c("Men", "Women/Others")))) +
+    geom_bar(stat="identity") +
+    geom_text(aes(label = paste0(round(ratio*100, 1),"%")), position = position_stack(vjust = 0.5), size = 2) +
+    scale_x_discrete(limits=vec_game_years) +
+    scale_y_discrete(limits=seq(0, 325, 25)) +
+    coord_flip() +
+    labs(title = "Number of events in Olympics and gender inclusivity over the years",
+         x = "Total events",
+         y = "Olympic Year",
+         fill="Event Gender")
+```
+
+# Conclusion
+
+We have first understood a brief history of the key players in Olympics, be in countries or athletes where it was observed that the United States and Europe have had rich histories in the Olympics, observed by their hostings of events and their dominance of athletes at the games. As Asia has gained global prominence in the world stage, this also resulted in the countries' (Japan, China, South Korea's) willingness to host the games, in order to better place itself in the world. The hosting of games can be related to a country's economic position, and political stability.
+
+Athletes who strive to become the most decorated in their discipline requires longevity and consistency in their performance, it is no surprise that there is a dominance of Western athletes in the top decorated athletes as they have participated in the games for a much longer time.
+
+We then went through the years, to investigate trends. A country's dominance in the Olympics is measured by the number of gold medals its athletes have obtained. Countries use the Olympics as a proxy competing ground to showcase their power in the world stage, where we have observed competition between USA and USSR during the Cold War era, and in recent times, between USA and China. Also, policy changes, such as decisions to invest more in sporting hubs or facilities would drive a country's performance in the Olympics upwards.
+
+Long standing disciplines are a staple of Olympic games, e.g. swimming, gymnastics. But that doesn't mean additional disciplines are not allowed to be included in. Japan has taken the imitative to introduce many new events and disciplines, of which have captured the world's approval and attention. In terms of gender equality, there is a clear evolution, in-line with the growth and development of inclusivity in our modern times.
+
+The Olympic Games is not just a sporting event, it is a mirror to how the world operates, how global powers shift and how our opinions as modern humans develop over time.
